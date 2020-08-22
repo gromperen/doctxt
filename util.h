@@ -6,3 +6,4 @@
 
 void die(const char *fmt, ...);
 void *xmalloc(size_t len);
+void *ecalloc(size_t nmembm, size_t size);

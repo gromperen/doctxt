@@ -14,8 +14,8 @@ void
 writetofile(char *out_file_path, char *data)
 {
 	FILE *out_file;
-	out_file = fopen(out_file_path, "wt");
-	fputs(data, out_file);
+	out_file = fopen(out_file_path, "w");
+	fprintf(out_file,"%s", data);
 	fclose(out_file);
 	return;
 }
@@ -27,7 +27,7 @@ readzip(const char *path, char *filename)
 	zip_file_t *file;
 	struct zip_stat st;
 	int err = 0;
-	size_t size;
+	int size;
 	char *data;
 
 	zf = zip_open(path, ZIP_RDONLY, &err);
@@ -43,12 +43,12 @@ readzip(const char *path, char *filename)
 	}
 
 	zip_stat(zf, filename, 0, &st);
-	size = st.size + 1;
+	size = st.size;
 
-	data = xmalloc(size * sizeof(char));
+	data = ecalloc(sizeof(char), size);
 
 	zip_fread(file, data, size);
-	
+
 	zip_fclose(file);
 	zip_close(zf);
 	
@@ -95,8 +95,8 @@ parsexml(const char *path, FILE *outfile)
 								}
 							}
 						}
-						fprintf(outfile, "\n");
 					}
+					fprintf(outfile, "\n");
 				}
 			}
 		}
