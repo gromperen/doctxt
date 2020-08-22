@@ -16,6 +16,7 @@ $ apt install libzip-dev
 Install dependecies first. 
 
 ```sh
+$ make clean
 $ make
 $ make install
 ```
