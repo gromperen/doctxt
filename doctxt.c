@@ -43,13 +43,14 @@ readzip(const char *path, char *filename)
 	zip_stat(zf, filename, 0, &st);
 	size = st.size;
 
-	data = ecalloc(sizeof(char), size);
+	data = ecalloc(sizeof(char), size + 10);
 
 	zip_fread(file, data, size);
 
 	zip_fclose(file);
 	zip_close(zf);
 	
+	data[size] = '\0'; /* fixes bug where sometimes file doesnt end in '\0' */
 	writetofile(TEMPFILE, data);
 
 	free(data);
