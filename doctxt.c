@@ -8,7 +8,7 @@
 #include "util.h"
 
 #define LEN(a)		sizeof(a) / sizeof(a[0]) 
-#define TEMPFILE	"doctxt-temp.txt" 
+#define TEMPFILE	"/tmp/doctxt-temp.txt" 
 
 void
 writetofile(char *out_file_path, char *data)
@@ -30,9 +30,7 @@ readzip(const char *path, char *filename)
 	int size;
 	char *data;
 
-	zf = zip_open(path, ZIP_RDONLY, &err);
-
-	if (err != 0) {
+	if ((zf = zip_open(path, 0, &err)) == NULL) {
 		die("Unable to extract zip: %s", path);
 	}
 
