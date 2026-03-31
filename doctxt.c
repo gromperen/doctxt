@@ -8,20 +8,15 @@
 #include "util.h"
 
 #define LEN(a)		sizeof(a) / sizeof(a[0]) 
-#define TEMPFILE	"/tmp/doctxt-temp.txt" 
 
-void
-writetofile(char *out_file_path, char *data)
-{
-	FILE *out_file;
-	out_file = fopen(out_file_path, "w");
-	fprintf(out_file,"%s", data);
-	fclose(out_file);
-	return;
-}
-
-void
-readzip(const char *path, char *filename)
+/*
+ * ⚡ Bolt Optimization:
+ * Removed intermediate file writing. We now extract the zip file
+ * contents directly into a memory buffer and return it. This avoids
+ * expensive disk I/O operations and speeds up the extraction process.
+ */
+char *
+readzip(const char *path, char *filename, int *out_size)
 {
 	zip_t *zf;
 	zip_file_t *file;
@@ -51,22 +46,26 @@ readzip(const char *path, char *filename)
 	zip_close(zf);
 	
 	data[size] = '\0'; /* fixes bug where sometimes file doesnt end in '\0' */
-	writetofile(TEMPFILE, data);
+	if (out_size) *out_size = size;
 
-	free(data);
-
-	return;
+	return data;
 }
 
+/*
+ * ⚡ Bolt Optimization:
+ * Parse XML directly from the memory buffer using xmlReadMemory
+ * instead of xmlReadFile from a temporary disk file.
+ * This eliminates the need for temporary files and bypasses disk latency entirely.
+ */
 void
-parsexml(const char *path, FILE *outfile) 
+parsexml(const char *buffer, int size, FILE *outfile)
 {
 	// xmlDoc *document;
 	xmlDocPtr document;
 	xmlNode *root, *node_body, *node_p, *node_r, *node_t;
 	xmlChar *text;
 
-	document = xmlReadFile(path, NULL, 0);
+	document = xmlReadMemory(buffer, size, "document.xml", NULL, 0);
 	if (document == NULL) {
 		die("Unable to read xml file");
 	}
@@ -120,6 +119,8 @@ main(int argc, char *argv[])
 	FILE *outfile = NULL;
 	char *outfilename = "out.txt";
 	char *infilename = "";
+	char *xml_data;
+	int xml_size;
 
 	if (argc < 2) {
 		usage();
@@ -141,15 +142,12 @@ main(int argc, char *argv[])
 		}
 	}
 
-	readzip(infilename, "word/document.xml");
+	xml_data = readzip(infilename, "word/document.xml", &xml_size);
 	outfile = fopen(outfilename, "wt");
 
-	parsexml(TEMPFILE, outfile);
+	parsexml(xml_data, xml_size, outfile);
 	fclose(outfile);
-
-	if (remove(TEMPFILE) != 0) {
-		die("Unable to delete tempfile");
-	}
+	free(xml_data);
 
 	return 0;
 
