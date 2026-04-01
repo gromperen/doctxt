@@ -8,20 +8,9 @@
 #include "util.h"
 
 #define LEN(a)		sizeof(a) / sizeof(a[0]) 
-#define TEMPFILE	"/tmp/doctxt-temp.txt" 
 
-void
-writetofile(char *out_file_path, char *data)
-{
-	FILE *out_file;
-	out_file = fopen(out_file_path, "w");
-	fprintf(out_file,"%s", data);
-	fclose(out_file);
-	return;
-}
-
-void
-readzip(const char *path, char *filename)
+char *
+readzip(const char *path, char *filename, int *out_size)
 {
 	zip_t *zf;
 	zip_file_t *file;
@@ -51,22 +40,20 @@ readzip(const char *path, char *filename)
 	zip_close(zf);
 	
 	data[size] = '\0'; /* fixes bug where sometimes file doesnt end in '\0' */
-	writetofile(TEMPFILE, data);
 
-	free(data);
-
-	return;
+	*out_size = size;
+	return data;
 }
 
 void
-parsexml(const char *path, FILE *outfile) 
+parsexml(const char *xml_data, int xml_size, FILE *outfile)
 {
 	// xmlDoc *document;
 	xmlDocPtr document;
 	xmlNode *root, *node_body, *node_p, *node_r, *node_t;
 	xmlChar *text;
 
-	document = xmlReadFile(path, NULL, 0);
+	document = xmlReadMemory(xml_data, xml_size, "noname.xml", NULL, 0);
 	if (document == NULL) {
 		die("Unable to read xml file");
 	}
@@ -120,6 +107,8 @@ main(int argc, char *argv[])
 	FILE *outfile = NULL;
 	char *outfilename = "out.txt";
 	char *infilename = "";
+	char *xml_data = NULL;
+	int xml_size = 0;
 
 	if (argc < 2) {
 		usage();
@@ -141,15 +130,13 @@ main(int argc, char *argv[])
 		}
 	}
 
-	readzip(infilename, "word/document.xml");
+	xml_data = readzip(infilename, "word/document.xml", &xml_size);
 	outfile = fopen(outfilename, "wt");
 
-	parsexml(TEMPFILE, outfile);
+	parsexml(xml_data, xml_size, outfile);
 	fclose(outfile);
 
-	if (remove(TEMPFILE) != 0) {
-		die("Unable to delete tempfile");
-	}
+	free(xml_data);
 
 	return 0;
 
