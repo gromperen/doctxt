@@ -1,0 +1,3 @@
+## 2024-04-03 - Avoid Temporary Files for In-Memory Processing
+**Learning:** The `doctxt` tool previously wrote the extracted XML file from the `zip` archive to `/tmp/doctxt-temp.txt` before reading it back with `libxml2`'s `xmlReadFile`. Writing to and reading from disk incurs a significant I/O overhead compared to in-memory operations. Using `xmlReadMemory` allows direct processing of the extracted string buffer.
+**Action:** When extracting data from archives or transforming data, always look for opportunities to pipe the data directly in memory (e.g., using buffer-parsing functions of libraries) rather than using temporary files. This improves performance and avoids potential security issues or filesystem conflicts.
