@@ -8,20 +8,9 @@
 #include "util.h"
 
 #define LEN(a)		sizeof(a) / sizeof(a[0]) 
-#define TEMPFILE	"/tmp/doctxt-temp.txt" 
 
 void
-writetofile(char *out_file_path, char *data)
-{
-	FILE *out_file;
-	out_file = fopen(out_file_path, "w");
-	fprintf(out_file,"%s", data);
-	fclose(out_file);
-	return;
-}
-
-void
-readzip(const char *path, char *filename)
+readzip(const char *path, const char *filename, char **out_data, int *out_size)
 {
 	zip_t *zf;
 	zip_file_t *file;
@@ -51,22 +40,19 @@ readzip(const char *path, char *filename)
 	zip_close(zf);
 	
 	data[size] = '\0'; /* fixes bug where sometimes file doesnt end in '\0' */
-	writetofile(TEMPFILE, data);
 
-	free(data);
-
-	return;
+	*out_data = data;
+	*out_size = size;
 }
 
 void
-parsexml(const char *path, FILE *outfile) 
+parsexml(const char *buffer, int size, FILE *outfile)
 {
-	// xmlDoc *document;
 	xmlDocPtr document;
 	xmlNode *root, *node_body, *node_p, *node_r, *node_t;
 	xmlChar *text;
 
-	document = xmlReadFile(path, NULL, 0);
+	document = xmlReadMemory(buffer, size, "noname.xml", NULL, 0);
 	if (document == NULL) {
 		die("Unable to read xml file");
 	}
@@ -81,21 +67,21 @@ parsexml(const char *path, FILE *outfile)
 		die("wrong xml format");
 	}
 	for (node_body = root->children; node_body; node_body = node_body->next) {
-		if (xmlStrEqual(node_body->name, (const xmlChar *) "body")) {
+		if (node_body->type == XML_ELEMENT_NODE && xmlStrEqual(node_body->name, (const xmlChar *) "body")) {
 			for (node_p = node_body->children; node_p; node_p = node_p->next) {
-				if (xmlStrEqual(node_p->name, (const xmlChar *) "p")) {
+				if (node_p->type == XML_ELEMENT_NODE && xmlStrEqual(node_p->name, (const xmlChar *) "p")) {
 					for (node_r = node_p->children; node_r; node_r = node_r->next) {
-						if (xmlStrEqual(node_r->name, (const xmlChar *) "r")) {
+						if (node_r->type == XML_ELEMENT_NODE && xmlStrEqual(node_r->name, (const xmlChar *) "r")) {
 							for (node_t = node_r->children; node_t; node_t = node_t->next) {
-								if (xmlStrEqual(node_t->name, (const xmlChar *) "t")) {
+								if (node_t->type == XML_ELEMENT_NODE && xmlStrEqual(node_t->name, (const xmlChar *) "t")) {
 									text = xmlNodeGetContent(node_t);
-									fprintf(outfile, "%s", text);
+									fputs((const char*)text, outfile);
 									xmlFree(text);
 								}
 							}
 						}
 					}
-					fprintf(outfile, "\n");
+					fputc('\n', outfile);
 				}
 			}
 		}
@@ -141,15 +127,14 @@ main(int argc, char *argv[])
 		}
 	}
 
-	readzip(infilename, "word/document.xml");
+	char *xml_data = NULL;
+	int xml_size = 0;
+	readzip(infilename, "word/document.xml", &xml_data, &xml_size);
 	outfile = fopen(outfilename, "wt");
 
-	parsexml(TEMPFILE, outfile);
+	parsexml(xml_data, xml_size, outfile);
 	fclose(outfile);
-
-	if (remove(TEMPFILE) != 0) {
-		die("Unable to delete tempfile");
-	}
+	free(xml_data);
 
 	return 0;
 
