@@ -60,12 +60,55 @@ readzip(const char *path, const char *filename, size_t *len)
 	return data;
 }
 
+static void
+walk(xmlNode *node, FILE *outfile)
+{
+	xmlNode *n, *next;
+	xmlChar *text;
+
+	for (n = node; n; n = n->next) {
+		if (n->type != XML_ELEMENT_NODE)
+			continue;
+		if (xmlStrEqual(n->name, (const xmlChar *)"pPr") ||
+		    xmlStrEqual(n->name, (const xmlChar *)"rPr") ||
+		    xmlStrEqual(n->name, (const xmlChar *)"sectPr") ||
+		    xmlStrEqual(n->name, (const xmlChar *)"tblPr") ||
+		    xmlStrEqual(n->name, (const xmlChar *)"tcPr") ||
+		    xmlStrEqual(n->name, (const xmlChar *)"trPr"))
+			continue;
+		if (xmlStrEqual(n->name, (const xmlChar *)"t")) {
+			if ((text = xmlNodeGetContent(n)) != NULL) {
+				fputs((const char *)text, outfile);
+				xmlFree(text);
+			}
+		} else if (xmlStrEqual(n->name, (const xmlChar *)"tab")) {
+			fputc('\t', outfile);
+		} else if (xmlStrEqual(n->name, (const xmlChar *)"br") || xmlStrEqual(n->name, (const xmlChar *)"cr")) {
+			fputc('\n', outfile);
+		} else if (xmlStrEqual(n->name, (const xmlChar *)"p")) {
+			walk(n->children, outfile);
+			if (n->parent == NULL || !xmlStrEqual(n->parent->name, (const xmlChar *)"tc"))
+				fputc('\n', outfile);
+		} else if (xmlStrEqual(n->name, (const xmlChar *)"tr")) {
+			walk(n->children, outfile);
+			fputc('\n', outfile);
+		} else if (xmlStrEqual(n->name, (const xmlChar *)"tc")) {
+			walk(n->children, outfile);
+			for (next = n->next; next && next->type != XML_ELEMENT_NODE; next = next->next)
+				;
+			if (next)
+				fputc('\t', outfile);   /* separate table cells */
+		} else {
+			walk(n->children, outfile);
+		}
+	}
+}
+
 void
 parsexml(const char *data, size_t len, FILE *outfile)
 {
 	xmlDocPtr document;
-	xmlNode *root, *node_body, *node_p, *node_r, *node_t;
-	xmlChar *text;
+	xmlNode *root, *node_body;
 
 	document = xmlReadMemory(data, (int)len, "document.xml", NULL, 0);
 	if (document == NULL) {
@@ -83,24 +126,7 @@ parsexml(const char *data, size_t len, FILE *outfile)
 	}
 	for (node_body = root->children; node_body; node_body = node_body->next) {
 		if (xmlStrEqual(node_body->name, (const xmlChar *) "body")) {
-			for (node_p = node_body->children; node_p; node_p = node_p->next) {
-				if (xmlStrEqual(node_p->name, (const xmlChar *) "p")) {
-					for (node_r = node_p->children; node_r; node_r = node_r->next) {
-						if (xmlStrEqual(node_r->name, (const xmlChar *) "r")) {
-							for (node_t = node_r->children; node_t; node_t = node_t->next) {
-								if (xmlStrEqual(node_t->name, (const xmlChar *) "t")) {
-									text = xmlNodeGetContent(node_t);
-									if (text != NULL) {
-										fprintf(outfile, "%s", text);
-										xmlFree(text);
-									}
-								}
-							}
-						}
-					}
-					fprintf(outfile, "\n");
-				}
-			}
+			walk(node_body->children, outfile);
 		}
 	}
 
