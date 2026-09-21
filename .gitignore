@@ -1,0 +1,4 @@
+doctxt
+*.o
+doctxt-*.tar.gz
+out.txt
