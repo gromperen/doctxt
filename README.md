@@ -2,7 +2,7 @@
 
 doctxt is a simple, fast docx to txt conversion tool written in C.
 
-### Dependecies
+### Dependencies
 
 libzip, libxml2 for building
 
@@ -13,7 +13,7 @@ $ apt install libzip-dev
 
 ### Installation
 
-Install dependecies first. 
+Install dependencies first. 
 
 ```sh
 $ make clean
@@ -24,7 +24,8 @@ $ make install
 ### Usage
 
 ```sh
-$ doctxt [FILE] [-o OUTFILE]
+$ doctxt FILE [-o OUTFILE]
+$ doctxt -v
 ```
 
-If -o is omitted output will be written to out.txt
+If -o is omitted output will be written to out.txt. `-v` prints the version.
