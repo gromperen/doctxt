@@ -1,72 +1,73 @@
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <zip.h>
 #include <libxml/parser.h>
 
 #include "util.h"
 
-#define LEN(a)		sizeof(a) / sizeof(a[0]) 
-#define TEMPFILE	"/tmp/doctxt-temp.txt" 
-
-void
-writetofile(char *out_file_path, char *data)
-{
-	FILE *out_file;
-	out_file = fopen(out_file_path, "w");
-	fprintf(out_file,"%s", data);
-	fclose(out_file);
-	return;
-}
-
-void
-readzip(const char *path, char *filename)
+char *
+readzip(const char *path, const char *filename, size_t *len)
 {
 	zip_t *zf;
 	zip_file_t *file;
 	struct zip_stat st;
+	zip_error_t error;
+	zip_uint64_t size, off;
+	zip_int64_t n;
 	int err = 0;
-	int size;
 	char *data;
 
 	if ((zf = zip_open(path, 0, &err)) == NULL) {
-		die("Unable to extract zip: %s", path);
+		zip_error_init_with_code(&error, err);
+		die("Unable to extract zip %s: %s", path, zip_error_strerror(&error));
 	}
 
-	file = zip_fopen(zf, filename, ZIP_FL_UNCHANGED);
-
-	if (file == NULL) {
-		die("File is wrong format");
+	if (zip_stat(zf, filename, 0, &st) != 0) {
+		zip_close(zf);
+		die("Unable to stat %s in zip", filename);
 	}
 
-	zip_stat(zf, filename, 0, &st);
 	size = st.size;
+	if (size > INT_MAX) {
+		zip_close(zf);
+		die("File %s too large in %s", filename, path);
+	}
 
-	data = ecalloc(sizeof(char), size + 10);
+	if ((file = zip_fopen(zf, filename, 0)) == NULL) {
+		zip_close(zf);
+		die("%s not found in %s", filename, path);
+	}
 
-	zip_fread(file, data, size);
+	data = ecalloc(sizeof(char), size + 1);
+
+	for (off = 0; off < size; off += n) {
+		if ((n = zip_fread(file, data + off, size - off)) <= 0) {
+			zip_fclose(file);
+			zip_close(zf);
+			free(data);
+			die("Unable to read %s in %s", filename, path);
+		}
+	}
 
 	zip_fclose(file);
 	zip_close(zf);
-	
+
 	data[size] = '\0'; /* fixes bug where sometimes file doesnt end in '\0' */
-	writetofile(TEMPFILE, data);
+	*len = size;
 
-	free(data);
-
-	return;
+	return data;
 }
 
 void
-parsexml(const char *path, FILE *outfile) 
+parsexml(const char *data, size_t len, FILE *outfile)
 {
-	// xmlDoc *document;
 	xmlDocPtr document;
 	xmlNode *root, *node_body, *node_p, *node_r, *node_t;
 	xmlChar *text;
 
-	document = xmlReadFile(path, NULL, 0);
+	document = xmlReadMemory(data, (int)len, "document.xml", NULL, 0);
 	if (document == NULL) {
 		die("Unable to read xml file");
 	}
@@ -89,8 +90,10 @@ parsexml(const char *path, FILE *outfile)
 							for (node_t = node_r->children; node_t; node_t = node_t->next) {
 								if (xmlStrEqual(node_t->name, (const xmlChar *) "t")) {
 									text = xmlNodeGetContent(node_t);
-									fprintf(outfile, "%s", text);
-									xmlFree(text);
+									if (text != NULL) {
+										fprintf(outfile, "%s", text);
+										xmlFree(text);
+									}
 								}
 							}
 						}
@@ -99,7 +102,6 @@ parsexml(const char *path, FILE *outfile)
 				}
 			}
 		}
-		break;
 	}
 
 	xmlFreeDoc(document);
@@ -107,50 +109,54 @@ parsexml(const char *path, FILE *outfile)
 	return;
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	die("usage: doctxt infile [-o outfile]");
-	return;
 }
 
 int
 main(int argc, char *argv[])
 {
 	FILE *outfile = NULL;
-	char *outfilename = "out.txt";
-	char *infilename = "";
+	const char *outfilename = "out.txt";
+	const char *infilename = NULL;
+	size_t len;
+	char *data;
+	int i;
 
-	if (argc < 2) {
-		usage();
-	}
-	infilename = argv[1];
-	for (int i = 2; i < argc; i++) {
+	for (i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "-v")) {
 			puts("doctxt-"VERSION);
 			return 0;
 		} else if (!strcmp(argv[i], "-o")) {
-			if (argc <= i - 1) {
+			if (i + 1 >= argc) {
 				usage();
 			}
-			outfilename = argv[i + 1];
-			i++;
-		}
-		else {
+			outfilename = argv[++i];
+		} else if (argv[i][0] == '-') {
 			usage();
+		} else {
+			if (infilename != NULL) {
+				usage();
+			}
+			infilename = argv[i];
 		}
 	}
 
-	readzip(infilename, "word/document.xml");
-	outfile = fopen(outfilename, "wt");
-
-	parsexml(TEMPFILE, outfile);
-	fclose(outfile);
-
-	if (remove(TEMPFILE) != 0) {
-		die("Unable to delete tempfile");
+	if (infilename == NULL) {
+		usage();
 	}
+
+	data = readzip(infilename, "word/document.xml", &len);
+
+	if ((outfile = fopen(outfilename, "w")) == NULL) {
+		die("Unable to open %s:", outfilename);
+	}
+
+	parsexml(data, len, outfile);
+	fclose(outfile);
+	free(data);
 
 	return 0;
-
 }
